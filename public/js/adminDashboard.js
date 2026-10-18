@@ -5,6 +5,7 @@ const AdminDashboard = {
     this.bindAdminEvents();
     this.resetQuestionBuilder();
     this.addQuestionBlock();
+    this.loadPublishedExams();
 
     try {
       const res = await fetch('/api/admin/results', {
@@ -32,7 +33,7 @@ const AdminDashboard = {
           <td class="p-3 font-bold text-indigo-600">${r.score} / ${r.exam ? r.exam.totalMarks : ''}</td>
           <td class="p-3 font-semibold text-emerald-600">${r.accuracy}%</td>
           <td class="p-3">
-            ${r.student ? `<button onclick="AdminDashboard.deleteUser('${r.student._id}')" class="bg-rose-600 text-white text-xs px-2 py-1 rounded">Delete User</button>` : ''}
+            ${r.student ? `<button onclick="AdminDashboard.deleteCandidate('${r.student._id}')" class="bg-rose-600 hover:bg-rose-700 text-white text-xs px-2.5 py-1.5 rounded-lg font-bold transition">Delete Candidate</button>` : ''}
           </td>
         </tr>
       `).join('');
@@ -41,19 +42,76 @@ const AdminDashboard = {
     }
   },
 
+  async loadPublishedExams() {
+    try {
+      const res = await fetch('/api/student/exams', {
+        headers: { Authorization: `Bearer ${App.token}` }
+      });
+      const exams = await res.json();
+      const container = document.getElementById('publishedExamsContainer');
+
+      if (!container) return;
+
+      if (!exams.length) {
+        container.innerHTML = `<p class="text-xs text-slate-400">No published exams available.</p>`;
+        return;
+      }
+
+      container.innerHTML = exams.map(exam => `
+        <div class="flex justify-between items-center p-3.5 bg-slate-50 border border-slate-200 rounded-xl mb-2">
+          <div>
+            <h4 class="font-bold text-sm text-slate-800">${exam.title}</h4>
+            <p class="text-xs text-indigo-600 font-semibold">${exam.subject} • ${exam.durationMinutes} mins • ${exam.totalMarks} Marks</p>
+          </div>
+          <button onclick="AdminDashboard.deleteExam('${exam._id}')" class="bg-rose-600 hover:bg-rose-700 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition">
+            <i class="fa-solid fa-trash mr-1"></i> Delete Exam
+          </button>
+        </div>
+      `).join('');
+    } catch (err) {
+      console.error('Error loading published exams:', err);
+    }
+  },
+
+  async deleteCandidate(userId) {
+    if (confirm('Permanently delete this candidate account and all associated test records?')) {
+      try {
+        const res = await fetch(`/api/admin/users/${userId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${App.token}` }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+
+        alert('Candidate deleted successfully!');
+        this.loadData();
+      } catch (err) {
+        alert(`Delete Error: ${err.message}`);
+      }
+    }
+  },
+
+  async deleteExam(examId) {
+    if (confirm('Permanently delete this exam paper and all student results for it?')) {
+      try {
+        const res = await fetch(`/api/admin/exams/${examId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${App.token}` }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+
+        alert('Exam paper deleted successfully!');
+        this.loadData();
+      } catch (err) {
+        alert(`Delete Error: ${err.message}`);
+      }
+    }
+  },
+
   bindAdminEvents() {
     document.getElementById('addQuestionBtn').onclick = () => this.addQuestionBlock();
     document.getElementById('createExamForm').onsubmit = (e) => this.handleCreateExam(e);
-  },
-
-  async deleteUser(userId) {
-    if (confirm('Admin: Delete this candidate account permanently?')) {
-      await fetch(`/api/admin/users/${userId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${App.token}` }
-      });
-      this.loadData();
-    }
   },
 
   resetQuestionBuilder() {
