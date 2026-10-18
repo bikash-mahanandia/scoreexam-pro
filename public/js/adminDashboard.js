@@ -1,3 +1,5 @@
+// public/js/adminDashboard.js
+
 const AdminDashboard = {
   questionCount: 0,
 
