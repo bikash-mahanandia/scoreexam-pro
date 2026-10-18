@@ -1,5 +1,3 @@
-// public/js/adminDashboard.js
-
 const AdminDashboard = {
   questionCount: 0,
 
@@ -65,9 +63,14 @@ const AdminDashboard = {
             <h4 class="font-bold text-sm text-slate-800">${exam.title}</h4>
             <p class="text-xs text-indigo-600 font-semibold">${exam.subject} • ${exam.durationMinutes} mins • ${exam.totalMarks} Marks</p>
           </div>
-          <button onclick="AdminDashboard.deleteExam('${exam._id}')" class="bg-rose-600 hover:bg-rose-700 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition">
-            <i class="fa-solid fa-trash mr-1"></i> Delete Exam
-          </button>
+          <div class="flex space-x-2">
+            <button onclick='AdminDashboard.editExam(${JSON.stringify(exam).replace(/'/g, "&apos;")})' class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition">
+              <i class="fa-solid fa-pen-to-square mr-1"></i> Edit
+            </button>
+            <button onclick="AdminDashboard.deleteExam('${exam._id}')" class="bg-rose-600 hover:bg-rose-700 text-white text-xs px-3 py-1.5 rounded-lg font-bold transition">
+              <i class="fa-solid fa-trash mr-1"></i> Delete
+            </button>
+          </div>
         </div>
       `).join('');
     } catch (err) {
@@ -75,8 +78,37 @@ const AdminDashboard = {
     }
   },
 
+  editExam(exam) {
+    document.getElementById('editingExamId').value = exam._id;
+    document.getElementById('examTitle').value = exam.title;
+    document.getElementById('examSubject').value = exam.subject;
+    document.getElementById('examDuration').value = exam.durationMinutes;
+    document.getElementById('examTotalMarks').value = exam.totalMarks;
+
+    document.getElementById('formSectionTitle').textContent = `Editing Exam: ${exam.title}`;
+    document.getElementById('submitExamFormBtn').textContent = 'Update Exam Paper';
+    document.getElementById('cancelEditBtn').classList.remove('hidden');
+
+    this.resetQuestionBuilder();
+    exam.questions.forEach((q) => {
+      this.addQuestionBlock(q);
+    });
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  },
+
+  cancelEdit() {
+    document.getElementById('editingExamId').value = '';
+    document.getElementById('createExamForm').reset();
+    document.getElementById('formSectionTitle').textContent = 'Create & Publish Exam';
+    document.getElementById('submitExamFormBtn').textContent = 'Publish Exam';
+    document.getElementById('cancelEditBtn').classList.add('hidden');
+    this.resetQuestionBuilder();
+    this.addQuestionBlock();
+  },
+
   async deleteCandidate(userId) {
-    if (confirm('Permanently delete this candidate account and all associated test records?')) {
+    if (confirm('Permanently delete this candidate account?')) {
       try {
         const res = await fetch(`/api/admin/users/${userId}`, {
           method: 'DELETE',
@@ -94,7 +126,7 @@ const AdminDashboard = {
   },
 
   async deleteExam(examId) {
-    if (confirm('Permanently delete this exam paper and all student results for it?')) {
+    if (confirm('Permanently delete this exam paper?')) {
       try {
         const res = await fetch(`/api/admin/exams/${examId}`, {
           method: 'DELETE',
@@ -113,7 +145,45 @@ const AdminDashboard = {
 
   bindAdminEvents() {
     document.getElementById('addQuestionBtn').onclick = () => this.addQuestionBlock();
-    document.getElementById('createExamForm').onsubmit = (e) => this.handleCreateExam(e);
+    document.getElementById('createExamForm').onsubmit = (e) => this.handleSaveExam(e);
+    document.getElementById('cancelEditBtn').onclick = () => this.cancelEdit();
+
+    const csvInput = document.getElementById('csvFileInput');
+    if (csvInput) {
+      csvInput.onchange = (e) => this.handleCSVUpload(e);
+    }
+  },
+
+  handleCSVUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: false,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const rows = results.data;
+        if (!rows.length) return alert('CSV file is empty!');
+
+        if (this.questionCount === 1) {
+          const firstInput = document.querySelector('.q-text');
+          if (firstInput && !firstInput.value) this.resetQuestionBuilder();
+        }
+
+        rows.forEach((row) => {
+          if (row.length >= 5) {
+            this.addQuestionBlock({
+              questionText: row[0],
+              options: [row[1], row[2], row[3], row[4]],
+              correctOptionIndex: parseInt(row[5]) || 0,
+              explanation: row[6] || ''
+            });
+          }
+        });
+
+        alert(`Successfully imported ${rows.length} questions from CSV!`);
+      }
+    });
   },
 
   resetQuestionBuilder() {
@@ -121,36 +191,37 @@ const AdminDashboard = {
     this.questionCount = 0;
   },
 
-  addQuestionBlock() {
+  addQuestionBlock(data = null) {
     this.questionCount++;
     const container = document.getElementById('dynamicQuestionsContainer');
     const qDiv = document.createElement('div');
     qDiv.className = 'q-block bg-slate-50 p-4 rounded-xl border space-y-3';
     qDiv.innerHTML = `
       <h4 class="font-bold text-xs text-slate-500 uppercase">Question #${this.questionCount}</h4>
-      <input type="text" class="q-text w-full p-2.5 border rounded-lg text-sm" placeholder="Question Text" required>
+      <input type="text" class="q-text w-full p-2.5 border rounded-lg text-sm" placeholder="Question Text" value="${data ? data.questionText : ''}" required>
       <div class="grid grid-cols-2 gap-2">
-        <input type="text" class="q-opt-0 p-2 border rounded-lg text-xs" placeholder="Option A" required>
-        <input type="text" class="q-opt-1 p-2 border rounded-lg text-xs" placeholder="Option B" required>
-        <input type="text" class="q-opt-2 p-2 border rounded-lg text-xs" placeholder="Option C" required>
-        <input type="text" class="q-opt-3 p-2 border rounded-lg text-xs" placeholder="Option D" required>
+        <input type="text" class="q-opt-0 p-2 border rounded-lg text-xs" placeholder="Option A" value="${data ? data.options[0] : ''}" required>
+        <input type="text" class="q-opt-1 p-2 border rounded-lg text-xs" placeholder="Option B" value="${data ? data.options[1] : ''}" required>
+        <input type="text" class="q-opt-2 p-2 border rounded-lg text-xs" placeholder="Option C" value="${data ? data.options[2] : ''}" required>
+        <input type="text" class="q-opt-3 p-2 border rounded-lg text-xs" placeholder="Option D" value="${data ? data.options[3] : ''}" required>
       </div>
       <div class="grid grid-cols-2 gap-2">
         <select class="q-correct p-2 border rounded-lg text-xs font-semibold">
-          <option value="0">Correct Choice: Option A</option>
-          <option value="1">Correct Choice: Option B</option>
-          <option value="2">Correct Choice: Option C</option>
-          <option value="3">Correct Choice: Option D</option>
+          <option value="0" ${data && data.correctOptionIndex === 0 ? 'selected' : ''}>Correct Choice: Option A</option>
+          <option value="1" ${data && data.correctOptionIndex === 1 ? 'selected' : ''}>Correct Choice: Option B</option>
+          <option value="2" ${data && data.correctOptionIndex === 2 ? 'selected' : ''}>Correct Choice: Option C</option>
+          <option value="3" ${data && data.correctOptionIndex === 3 ? 'selected' : ''}>Correct Choice: Option D</option>
         </select>
-        <input type="text" class="q-exp p-2 border rounded-lg text-xs" placeholder="Explanation (Optional)">
+        <input type="text" class="q-exp p-2 border rounded-lg text-xs" placeholder="Explanation (Optional)" value="${data ? data.explanation : ''}">
       </div>
     `;
     container.appendChild(qDiv);
   },
 
-  async handleCreateExam(e) {
+  async handleSaveExam(e) {
     e.preventDefault();
 
+    const editingId = document.getElementById('editingExamId').value;
     const title = document.getElementById('examTitle').value;
     const subject = document.getElementById('examSubject').value;
     const durationMinutes = parseInt(document.getElementById('examDuration').value);
@@ -173,9 +244,12 @@ const AdminDashboard = {
       });
     });
 
+    const endpoint = editingId ? `/api/admin/exams/${editingId}` : '/api/admin/exams';
+    const method = editingId ? 'PUT' : 'POST';
+
     try {
-      const res = await fetch('/api/admin/exams', {
-        method: 'POST',
+      const res = await fetch(endpoint, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${App.token}`
@@ -183,10 +257,10 @@ const AdminDashboard = {
         body: JSON.stringify({ title, subject, durationMinutes, totalMarks, questions })
       });
 
-      if (!res.ok) throw new Error('Failed to publish exam');
+      if (!res.ok) throw new Error('Failed to save exam paper');
 
-      alert('Exam paper published successfully!');
-      document.getElementById('createExamForm').reset();
+      alert(editingId ? 'Exam paper updated successfully!' : 'Exam paper published successfully!');
+      this.cancelEdit();
       this.loadData();
     } catch (err) {
       alert(err.message);

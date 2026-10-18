@@ -6,6 +6,7 @@
   <title>ScoreExam Pro - Computer Based Test Portal</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="bg-slate-100 font-sans text-slate-800 min-h-screen flex flex-col">
@@ -167,22 +168,36 @@
         <div class="bg-white p-5 rounded-2xl border"><p class="text-xs text-slate-400 font-bold uppercase">Class Average</p><p id="kpiAvg" class="text-3xl font-extrabold text-indigo-600">0</p></div>
       </div>
 
-      <div class="bg-white p-6 rounded-2xl border space-y-4">
-        <h3 class="text-lg font-bold border-b pb-2">Create & Publish Exam</h3>
-        <form id="createExamForm" class="space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <input type="text" id="examTitle" placeholder="Title" required class="border p-2.5 rounded-xl text-sm">
-            <input type="text" id="examSubject" placeholder="Subject" required class="border p-2.5 rounded-xl text-sm">
-            <input type="number" id="examDuration" placeholder="Duration (Mins)" required class="border p-2.5 rounded-xl text-sm">
-            <input type="number" id="examTotalMarks" placeholder="Total Marks" required class="border p-2.5 rounded-xl text-sm">
-          </div>
-          <div id="dynamicQuestionsContainer" class="space-y-4 border-t pt-4"></div>
-          <div class="flex justify-between">
-            <button type="button" id="addQuestionBtn" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold">Append Question</button>
-            <button type="submit" class="bg-emerald-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold">Publish Exam</button>
-          </div>
-        </form>
-      </div>
+      <div class="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
+  <div class="flex justify-between items-center border-b pb-2">
+    <h3 id="formSectionTitle" class="text-lg font-bold text-slate-800">Create & Publish Exam</h3>
+    <button id="cancelEditBtn" type="button" class="hidden bg-slate-500 hover:bg-slate-600 text-white text-xs px-3 py-1.5 rounded-lg font-bold">Cancel Editing</button>
+  </div>
+
+  <!-- Bulk File Import Bar -->
+  <div class="p-4 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-2">
+    <label class="block text-xs font-bold text-indigo-900 uppercase">Bulk Import Questions (CSV File)</label>
+    <div class="flex items-center space-x-3">
+      <input type="file" id="csvFileInput" accept=".csv" class="text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700">
+      <span class="text-xs text-slate-400 font-medium">CSV Format: Question, Option A, Option B, Option C, Option D, Correct Index (0-3), Explanation</span>
+    </div>
+  </div>
+
+  <form id="createExamForm" class="space-y-4">
+    <input type="hidden" id="editingExamId" value="">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <input type="text" id="examTitle" placeholder="Title" required class="border p-2.5 rounded-xl text-sm">
+      <input type="text" id="examSubject" placeholder="Subject" required class="border p-2.5 rounded-xl text-sm">
+      <input type="number" id="examDuration" placeholder="Duration (Mins)" required class="border p-2.5 rounded-xl text-sm">
+      <input type="number" id="examTotalMarks" placeholder="Total Marks" required class="border p-2.5 rounded-xl text-sm">
+    </div>
+    <div id="dynamicQuestionsContainer" class="space-y-4 border-t pt-4"></div>
+    <div class="flex justify-between">
+      <button type="button" id="addQuestionBtn" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold">Append Question</button>
+      <button type="submit" id="submitExamFormBtn" class="bg-emerald-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold">Publish Exam</button>
+    </div>
+  </form>
+</div>
 
       <!-- Published Exams Container with Delete Buttons -->
       <div class="bg-white p-6 rounded-2xl border space-y-4">

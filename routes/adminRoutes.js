@@ -83,4 +83,29 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
+
+// Paste this right above module.exports = router;
+router.put('/exams/:id', async (req, res) => {
+  try {
+    const examId = req.params.id;
+    const { title, subject, durationMinutes, totalMarks, questions } = req.body;
+
+    const updatedExam = await Exam.findByIdAndUpdate(
+      examId,
+      { title, subject, durationMinutes, totalMarks, questions },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedExam) {
+      return res.status(404).json({ message: 'Exam paper not found' });
+    }
+
+    res.json({ message: 'Exam paper updated successfully', exam: updatedExam });
+  } catch (err) {
+    res.status(500).json({ message: 'Error updating exam paper', error: err.message });
+  }
+});
+
+module.exports = router;
+
 module.exports = router;
