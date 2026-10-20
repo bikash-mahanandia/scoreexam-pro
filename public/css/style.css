@@ -12,3 +12,46 @@
 .status-answered { background-color: #10b981; color: #ffffff; }
 .status-not-answered { background-color: #ef4444; color: #ffffff; }
 .status-review { background-color: #8b5cf6; color: #ffffff; }
+
+body.dark-theme {
+  background-color: #111827 !important;
+  color: #e5e7eb !important;
+}
+
+body.dark-theme .bg-white {
+  background-color: #1f2937 !important;
+}
+
+body.dark-theme .bg-slate-50,
+body.dark-theme .bg-slate-100 {
+  background-color: #273444 !important;
+}
+
+body.dark-theme .text-slate-800,
+body.dark-theme .text-slate-700,
+body.dark-theme .text-slate-600 {
+  color: #e5e7eb !important;
+}
+
+body.dark-theme .text-slate-500,
+body.dark-theme .text-slate-400 {
+  color: #aebdce !important;
+}
+
+body.dark-theme .border,
+body.dark-theme .border-b,
+body.dark-theme .border-t,
+body.dark-theme .divide-y > * {
+  border-color: #3b4a5c !important;
+}
+
+body.dark-theme input:not([type="checkbox"]),
+body.dark-theme select {
+  background-color: #16202d;
+  color: #e5e7eb;
+  border-color: #4b5c70;
+}
+
+body.dark-theme input::placeholder {
+  color: #9aa9ba;
+}

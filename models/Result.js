@@ -9,6 +9,14 @@ const resultSchema = new mongoose.Schema({
   correctCount: { type: Number, required: true },
   wrongCount: { type: Number, required: true },
   accuracy: { type: Number, required: true },
+  checkInPhoto: { type: String, default: null },
+  checkOutPhoto: { type: String, default: null },
+  ipAddress: { type: String, default: null },
+  location: {
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null }
+  },
+  // Retained for records created before the proctoring field names were updated.
   initialPhoto: { type: String, default: null },
   finalPhoto: { type: String, default: null },
   answers: [{

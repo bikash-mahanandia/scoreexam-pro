@@ -8,14 +8,30 @@ router.use(protect, isStudent);
 
 router.get('/exams', async (req, res) => {
   try {
-    const exams = await Exam.find({ isActive: true }).select('title subject durationMinutes totalMarks questions');
+    const exams = await Exam.find({ isActive: true, isPublished: { $ne: false } })
+      .select('title subject topic durationMinutes totalMarks questions scheduledStartTime scheduledEndTime allowRetry');
+    const completedExamIds = new Set(
+      (await Result.find({ student: req.user.id }).select('exam')).map(result => String(result.exam))
+    );
+    const now = new Date();
     const examSummaries = exams.map(e => ({
       _id: e._id,
       title: e.title,
       subject: e.subject,
+      topic: e.topic,
       durationMinutes: e.durationMinutes,
       totalMarks: e.totalMarks,
-      totalQuestions: e.questions.length
+      totalQuestions: e.questions.length,
+      scheduledStartTime: e.scheduledStartTime,
+      scheduledEndTime: e.scheduledEndTime,
+      allowRetry: e.allowRetry,
+      hasCompleted: completedExamIds.has(String(e._id)),
+      status: completedExamIds.has(String(e._id)) || (e.scheduledEndTime && now > e.scheduledEndTime)
+        ? 'test-over'
+        : (e.scheduledStartTime && now < e.scheduledStartTime ? 'scheduled' : 'available'),
+      canStart: (!completedExamIds.has(String(e._id)) || e.allowRetry) &&
+        (!e.scheduledStartTime || now >= e.scheduledStartTime) &&
+        (!e.scheduledEndTime || now <= e.scheduledEndTime)
     }));
     res.json(examSummaries);
   } catch (err) {
@@ -26,7 +42,20 @@ router.get('/exams', async (req, res) => {
 router.get('/exams/:id/start', async (req, res) => {
   try {
     const exam = await Exam.findById(req.params.id);
-    if (!exam || !exam.isActive) return res.status(404).json({ message: 'Exam not found' });
+    if (!exam || !exam.isActive || exam.isPublished === false) {
+      return res.status(404).json({ message: 'Exam not found' });
+    }
+    const now = new Date();
+    if (exam.scheduledStartTime && now < exam.scheduledStartTime) {
+      return res.status(403).json({ message: 'This exam is not open yet' });
+    }
+    if (exam.scheduledEndTime && now > exam.scheduledEndTime) {
+      return res.status(403).json({ message: 'This exam is over' });
+    }
+    const previousResult = await Result.exists({ student: req.user.id, exam: exam._id });
+    if (previousResult && !exam.allowRetry) {
+      return res.status(403).json({ message: 'This exam has already been completed' });
+    }
 
     const secureQuestions = exam.questions.map((q, idx) => ({
       index: idx,
@@ -38,6 +67,7 @@ router.get('/exams/:id/start', async (req, res) => {
       _id: exam._id,
       title: exam.title,
       subject: exam.subject,
+      topic: exam.topic,
       durationMinutes: exam.durationMinutes,
       totalMarks: exam.totalMarks,
       questions: secureQuestions
@@ -49,13 +79,27 @@ router.get('/exams/:id/start', async (req, res) => {
 
 router.post('/exams/:id/submit', async (req, res) => {
   try {
-    const { studentAnswers, initialPhoto, finalPhoto } = req.body;
+    const {
+      studentAnswers, checkInPhoto, checkOutPhoto, location,
+      initialPhoto, finalPhoto
+    } = req.body;
     const exam = await Exam.findById(req.params.id);
 
-    if (!exam) return res.status(404).json({ message: 'Exam not found' });
+    if (!exam || !exam.isActive || exam.isPublished === false) {
+      return res.status(404).json({ message: 'Exam not found' });
+    }
+    const now = new Date();
+    if ((exam.scheduledStartTime && now < exam.scheduledStartTime) ||
+        (exam.scheduledEndTime && now > exam.scheduledEndTime)) {
+      return res.status(403).json({ message: 'This exam is not currently available' });
+    }
+    const previousResult = await Result.exists({ student: req.user.id, exam: exam._id });
+    if (previousResult && !exam.allowRetry) {
+      return res.status(403).json({ message: 'This exam has already been completed' });
+    }
 
     const totalQuestions = exam.questions.length;
-    const markPerQuestion = exam.totalMarks / totalQuestions;
+    const markPerQuestion = totalQuestions ? exam.totalMarks / totalQuestions : 0;
     
     let correctCount = 0;
     let attemptedCount = 0;
@@ -90,6 +134,12 @@ router.post('/exams/:id/submit', async (req, res) => {
       correctCount,
       wrongCount,
       accuracy,
+      checkInPhoto: checkInPhoto || initialPhoto || null,
+      checkOutPhoto: checkOutPhoto || finalPhoto || null,
+      ipAddress: req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || null,
+      location: location && Number.isFinite(Number(location.latitude)) && Number.isFinite(Number(location.longitude))
+        ? { latitude: Number(location.latitude), longitude: Number(location.longitude) }
+        : undefined,
       initialPhoto: initialPhoto || null,
       finalPhoto: finalPhoto || null,
       answers: evaluatedAnswers

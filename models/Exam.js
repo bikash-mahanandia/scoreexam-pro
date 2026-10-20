@@ -10,10 +10,15 @@ const questionSchema = new mongoose.Schema({
 const examSchema = new mongoose.Schema({
   title: { type: String, required: true },
   subject: { type: String, required: true },
+  topic: { type: String, default: '' },
   durationMinutes: { type: Number, required: true },
   totalMarks: { type: Number, required: true },
   questions: [questionSchema],
   isActive: { type: Boolean, default: true },
+  isPublished: { type: Boolean, default: false },
+  scheduledStartTime: { type: Date, default: null },
+  scheduledEndTime: { type: Date, default: null },
+  allowRetry: { type: Boolean, default: false },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdAt: { type: Date, default: Date.now }
 });

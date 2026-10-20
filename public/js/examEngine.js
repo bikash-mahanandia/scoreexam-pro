@@ -6,6 +6,9 @@ const ExamEngine = {
   timerInterval: null,
   timeRemainingSeconds: 0,
   initialPhotoBase64: null,
+  checkOutPhotoBase64: null,
+  location: null,
+  submitting: false,
   videoStream: null,
 
   async loadAvailableExams() {
@@ -23,19 +26,19 @@ const ExamEngine = {
       }
 
       grid.innerHTML = exams.map(exam => `
-        <div class="bg-white p-6 rounded-2xl border shadow-sm flex flex-col justify-between">
+        <div class="bg-white p-6 rounded-2xl border shadow-sm flex flex-col justify-between ${exam.status === 'available' && !exam.hasCompleted ? 'ring-2 ring-emerald-400' : ''}">
           <div>
             <h3 class="font-bold text-slate-800 text-lg mb-1">${exam.title}</h3>
             <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border mb-4 inline-block">${exam.subject}</span>
+            ${exam.topic ? `<p class="text-xs text-slate-500 mb-3">${exam.topic}</p>` : ''}
+            <p class="text-xs font-bold ${exam.status === 'available' ? 'text-emerald-700' : exam.status === 'scheduled' ? 'text-amber-700' : 'text-slate-500'} mb-3">${exam.status === 'test-over' ? 'Test Over' : exam.status === 'scheduled' ? `Starts ${new Date(exam.scheduledStartTime).toLocaleString()}` : 'NEW · Available now'}</p>
             <div class="text-xs text-slate-500 space-y-1 mb-5">
               <p>Duration: ${exam.durationMinutes} mins</p>
               <p>Questions: ${exam.totalQuestions}</p>
               <p>Total Marks: ${exam.totalMarks}</p>
             </div>
           </div>
-          <button onclick="ExamEngine.startExam('${exam._id}')" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-sm">
-            Launch Test Paper
-          </button>
+          ${exam.canStart ? `<button onclick="ExamEngine.startExam('${exam._id}')" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-sm">${exam.hasCompleted ? 'Retry Test' : 'Launch Test Paper'}</button>` : `<button disabled class="w-full bg-slate-200 text-slate-500 font-bold py-2.5 rounded-xl text-sm">${exam.status === 'test-over' ? 'Test Over' : 'Not Yet Available'}</button>`}
         </div>
       `).join('');
     } catch (err) {
@@ -80,6 +83,10 @@ const ExamEngine = {
 
     snapPhotoBtn.onclick = () => {
       this.initialPhotoBase64 = this.captureFrame();
+      if (this.videoStream) this.videoStream.getTracks().forEach(track => track.stop());
+      this.videoStream = null;
+      document.getElementById('webcamVideo').srcObject = null;
+      snapPhotoBtn.disabled = true;
       const previewImg = document.getElementById('capturedPhotoPreview');
       previewImg.src = this.initialPhotoBase64;
       document.getElementById('webcamVideo').classList.add('hidden');
@@ -97,16 +104,55 @@ const ExamEngine = {
     return canvasEl.toDataURL('image/jpeg');
   },
 
-  async startExam(examId) {
-    if (!this.initialPhotoBase64) {
-      if (!confirm('Proceed without Check-In photo?')) return;
+  async captureTemporaryPhoto() {
+    if (!navigator.mediaDevices?.getUserMedia) return null;
+    const videoEl = document.getElementById('webcamVideo');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      this.videoStream = stream;
+      videoEl.srcObject = stream;
+      await videoEl.play();
+      if (videoEl.readyState < 2) {
+        await new Promise(resolve => {
+          videoEl.addEventListener('loadeddata', resolve, { once: true });
+          setTimeout(resolve, 1500);
+        });
+      }
+      return videoEl.videoWidth ? this.captureFrame() : null;
+    } catch (err) {
+      return null;
+    } finally {
+      if (this.videoStream) this.videoStream.getTracks().forEach(track => track.stop());
+      this.videoStream = null;
+      videoEl.srcObject = null;
     }
+  },
+
+  requestLocation() {
+    if (!navigator.geolocation) return Promise.resolve(null);
+    return new Promise(resolve => {
+      navigator.geolocation.getCurrentPosition(
+        position => resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        }),
+        () => resolve(null),
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
+      );
+    });
+  },
+
+  async startExam(examId) {
+    if (!this.initialPhotoBase64) this.initialPhotoBase64 = await this.captureTemporaryPhoto();
+    if (!this.initialPhotoBase64 && !confirm('Check-in photo could not be captured. Continue without it?')) return;
+    this.location = await this.requestLocation();
 
     try {
       const res = await fetch(`/api/student/exams/${examId}/start`, {
         headers: { Authorization: `Bearer ${App.token}` }
       });
       this.currentExam = await res.json();
+      if (!res.ok) throw new Error(this.currentExam.message || 'Exam is not available');
 
       App.hideAllViews();
       document.getElementById('cbtEngineView').classList.remove('hidden');
@@ -122,6 +168,7 @@ const ExamEngine = {
       this.userResponses = {};
       this.reviewStatus = {};
       this.timeRemainingSeconds = this.currentExam.durationMinutes * 60;
+      this.submitting = false;
 
       this.startTimer();
       this.renderQuestion();
@@ -202,6 +249,8 @@ const ExamEngine = {
         this.currentIndex++;
         this.renderQuestion();
         this.renderPalette();
+      } else if (confirm('Do you want to submit?')) {
+        this.submitExam();
       }
     };
     document.getElementById('markReviewBtn').onclick = () => {
@@ -219,13 +268,10 @@ const ExamEngine = {
   },
 
   async submitExam() {
+    if (this.submitting) return;
+    this.submitting = true;
     clearInterval(this.timerInterval);
-
-    let finalPhotoBase64 = null;
-    if (this.videoStream) {
-      finalPhotoBase64 = this.captureFrame();
-      this.videoStream.getTracks().forEach(track => track.stop());
-    }
+    this.checkOutPhotoBase64 = await this.captureTemporaryPhoto();
 
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
@@ -245,15 +291,18 @@ const ExamEngine = {
         },
         body: JSON.stringify({
           studentAnswers,
-          initialPhoto: this.initialPhotoBase64,
-          finalPhoto: finalPhotoBase64
+          checkInPhoto: this.initialPhotoBase64,
+          checkOutPhoto: this.checkOutPhotoBase64,
+          location: this.location
         })
       });
 
       const evaluation = await res.json();
+      if (!res.ok) throw new Error(evaluation.message || 'Unable to submit exam');
       this.renderScorecard(evaluation);
     } catch (err) {
-      alert('Error submitting test evaluation.');
+      this.submitting = false;
+      alert(err.message || 'Error submitting test evaluation.');
     }
   },
 
